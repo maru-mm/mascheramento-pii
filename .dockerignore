@@ -1,13 +1,7 @@
-# Contesto di build minimo. Dockerfile (webapp) copia solo src/app/ e scarica il
-# modello da HF; Dockerfile.linux non fa nessun COPY (sorgenti e modello si
-# montano con -v a runtime), quindi qui si taglia tutto il resto: senza queste
-# righe il daemon si porterebbe dietro modelli e dataset, GB per niente.
-
-# tutto, poi si riammette a mano il minimo indispensabile
+# Contesto di build minimo: il Dockerfile copia solo service/ e requirements.txt
+# (il modello lo scarica da Hugging Face).
 *
-!src/app/
-
-# roba pesante o rigenerabile che NON deve rientrare nemmeno via src/app/
+!service/
+!requirements.txt
 **/__pycache__/
 **/*.pyc
-src/app/assets/**/*.psd

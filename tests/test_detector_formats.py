@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Formati reali per la rete regex+checksum di src/app/detectors.py.
+"""Formati reali per la rete regex+checksum di service/detectors.py.
 
 Ogni caso e' un identificativo scritto come lo si trova STAMPATO in un
 documento italiano: l'IBAN raggruppato a quattro di una fattura, un codice
@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src" / "app"))
+sys.path.insert(0, str(ROOT / "service"))
 
 import detectors  # noqa: E402
 
@@ -203,7 +203,7 @@ class DetectorFormatTests(unittest.TestCase):
         # E' la premessa della CI: i test dei detector girano senza il modello.
         # L'import va fatto in un processo pulito, altrimenti l'esito dipende da
         # cosa hanno gia' importato gli altri file di test.
-        codice = (f"import sys; sys.path.insert(0, {str(ROOT / 'src' / 'app')!r});"
+        codice = (f"import sys; sys.path.insert(0, {str(ROOT / 'service')!r});"
                   " import detectors;"
                   " print([m for m in ('torch', 'transformers', 'fitz', 'flask')"
                   " if m in sys.modules])")

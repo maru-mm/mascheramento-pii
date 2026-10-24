@@ -12,14 +12,12 @@ modello non maschera nessuno di questi, e può accettare anche il punto (`ore 18
 Tutti i valori sono SINTETICI.
 """
 
-import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src" / "app"))
+sys.path.insert(0, str(ROOT / "service"))
 
 import detectors  # noqa: E402
 
@@ -34,48 +32,6 @@ def ent(testo, pezzo, label="TIME", da=0):
 def completa(testo, *ents):
     detectors.complete_time(list(ents), testo)
     return [testo[e["start"]:e["end"]] for e in ents]
-
-
-def _carica_app():
-    """Importa app coi pesi finti: qui il modello vero non serve.
-
-    Tre accorgimenti, tutti necessari:
-    - il finto transformers va messo in sys.modules, non con patch("transformers.
-      pipeline"): un `from transformers import pipeline` su un _LazyModule NON passa
-      dall'attributo patchato e prende la funzione vera;
-    - la voce si sostituisce e ripristina A MANO: patch.dict(sys.modules) al
-      ripristino fa clear()+update() dell'intero sys.modules, buttando via anche
-      l'app appena importata (e ricaricando numpy);
-    - PII_MODEL_DIR (l'override che app.py stesso documenta) puntato a una cartella
-      esistente: senza, il controllo del modello mancante fa sys.exit(2) durante
-      l'import - un SystemExit che l'except qui sotto non cattura.
-    """
-    if "app" in sys.modules:
-        return sys.modules["app"]
-    finto = MagicMock()
-    finto.pipeline.return_value = MagicMock(return_value=[])
-    vero = sys.modules.get("transformers")
-    sys.modules["transformers"] = finto
-    prima = os.environ.get("PII_MODEL_DIR")
-    os.environ["PII_MODEL_DIR"] = str(ROOT / "tests")
-    try:
-        import app as pii_app
-    finally:
-        if vero is not None:
-            sys.modules["transformers"] = vero
-        else:
-            del sys.modules["transformers"]
-        if prima is not None:
-            os.environ["PII_MODEL_DIR"] = prima
-        else:
-            del os.environ["PII_MODEL_DIR"]
-    return pii_app
-
-
-try:                                    # torch/transformers/flask/fitz presenti?
-    APP = _carica_app()
-except Exception:                       # noqa: BLE001 - qualunque import mancante
-    APP = None
 
 
 class CompletaOra(unittest.TestCase):
@@ -125,32 +81,6 @@ class CompletaOra(unittest.TestCase):
         self.assertNotIn("TIME", {d[0] for d in detectors.DETECTORS})
         self.assertEqual(
             [e for e in detectors.detect_regex("ore 18:28") if e["label"] == "TIME"], [])
-
-
-@unittest.skipIf(APP is None, "app.py non importabile (torch/flask/fitz assenti)")
-class OraInAnalyze(unittest.TestCase):
-    """La pipeline completa: il modello (finto) taglia i minuti, l'output no."""
-
-    def _modello(self, testo, pezzi):
-        def nlp(chunks):
-            out = []
-            for c in chunks:
-                res = []
-                for p in pezzi:
-                    i = c.index(p)
-                    res.append({"entity_group": "TIME", "start": i, "end": i + len(p),
-                                "score": 0.9, "word": p})
-                out.append(res)
-            return out
-        return patch.object(APP, "nlp", nlp)
-
-    def test_nessun_minuto_in_chiaro(self):
-        t = "Ingresso ore 18:28, uscita ore 19:30."
-        with self._modello(t, ["18", "19:"]):
-            out = APP.analyze(t)
-        self.assertEqual(out["anonymized_text"],
-                         "Ingresso ore [TIME_1], uscita ore [TIME_2].")
-        self.assertEqual(out["mapping"], {"[TIME_1]": "18:28", "[TIME_2]": "19:30"})
 
 
 if __name__ == "__main__":

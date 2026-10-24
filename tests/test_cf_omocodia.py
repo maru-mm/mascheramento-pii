@@ -1,26 +1,23 @@
 # -*- coding: utf-8 -*-
-"""Codice fiscale omocodico: generazione sintetica e riconoscimento nell'app.
+"""Codice fiscale omocodico: riconoscimento nella rete regex.
 
 L'omocodia e' la procedura con cui l'Agenzia delle Entrate differenzia due codici
 fiscali identici: sostituisce le cifre con una lettera partendo da destra
 (0=L 1=M 2=N 3=P 4=Q 5=R 6=S 7=T 8=U 9=V) e ricalcola il carattere di controllo.
 Il codice che ne esce e' un codice fiscale valido a tutti gli effetti.
 
-I detector si importano da `src/app/detectors.py`, che non tira dentro
+I detector si importano da `service/detectors.py`, che non tira dentro
 torch/transformers: provare una regex non deve costare 0.3B di pesi scaricati.
 """
 
-import random
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src" / "data_pipeline"))
-sys.path.insert(0, str(ROOT / "src" / "app"))
+sys.path.insert(0, str(ROOT / "service"))
 
 import detectors  # noqa: E402
-import generate_synthetic_pii as gen  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -77,46 +74,23 @@ def app_would_redact(text):
     return False
 
 
-def make_cf(omocodia=0, seed=0):
-    rnd = random.Random(seed)
-    city = rnd.choice(gen.CITY_NAMES)
-    return gen.codice_fiscale("Mario", "Rossi", "M", 1985, 6, 12, city, omocodia=omocodia)
+# CF di base sintetico e posizioni delle cifre sostituite dall'omocodia, da destra.
+_BASE = "RSSMRA85H12F205"
+_OMOCODIA_POS = (14, 13, 12, 10, 9, 7, 6)
 
 
-class OmocodiaGeneration(unittest.TestCase):
-    def test_ordinary_code_is_unchanged(self):
-        code = make_cf(omocodia=0)
-        self.assertTrue(cf_checksum_ok(code))
-        self.assertRegex(code, r"^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$")
+def _check_char(body):
+    total = sum(_ODD[ch] if i % 2 == 0 else (int(ch) if ch.isdigit() else ord(ch) - 65)
+                for i, ch in enumerate(body))
+    return chr(65 + total % 26)
 
-    def test_every_substitution_depth_stays_valid(self):
-        for n in range(1, 8):
-            with self.subTest(sostituzioni=n):
-                code = make_cf(omocodia=n)
-                self.assertTrue(cf_checksum_ok(code),
-                                f"checksum non ricalcolato per {n} sostituzioni: {code}")
 
-    def test_substitution_runs_right_to_left(self):
-        ordinary = make_cf(omocodia=0)
-        for n in range(1, 8):
-            code = make_cf(omocodia=n)
-            changed = [i for i in range(15) if code[i] != ordinary[i]]
-            self.assertEqual(sorted(changed), sorted(gen.OMOCODIA_POS[:n]),
-                             f"posizioni sbagliate con {n} sostituzioni")
-
-    def test_substituted_characters_follow_the_table(self):
-        ordinary = make_cf(omocodia=0)
-        code = make_cf(omocodia=7)
-        for pos in gen.OMOCODIA_POS:
-            self.assertEqual(code[pos], "LMNPQRSTUV"[int(ordinary[pos])])
-
-    def test_generator_emits_some_omocodic_codes(self):
-        random.seed(20260803)
-        codes = [gen.cf_piece()[0][0] for _ in range(2000)]
-        omocodic = [c for c in codes if not c[6:8].isdigit() or not c[12:15].isdigit()]
-        self.assertTrue(omocodic, "nessun CF omocodico in 2000 estrazioni")
-        for code in codes:
-            self.assertTrue(cf_checksum_ok(code), f"CF non valido: {code}")
+def make_cf(omocodia=0):
+    body = list(_BASE)
+    for pos in _OMOCODIA_POS[:omocodia]:
+        body[pos] = "LMNPQRSTUV"[int(body[pos])]
+    body = "".join(body)
+    return body + _check_char(body)
 
 
 class OmocodiaDetection(unittest.TestCase):

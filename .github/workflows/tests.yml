@@ -32,11 +32,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Nessun pip install: la suite in tests/ gira sulla sola libreria
-      # standard. I generatori di dati (src/data_pipeline/) non hanno
-      # dipendenze e src/app/detectors.py non importa torch/transformers/fitz,
-      # quindi la rete regex+checksum e' verificabile senza il modello.
-      # Installare torch qui costerebbe minuti e gigabyte per zero copertura
-      # in piu': l'inferenza del modello non e' sotto test.
+      # Solo flask (per test_api.py): torch/transformers non servono, i test usano
+      # un modello finto. L'inferenza del modello vero non e' sotto test.
+      - name: install flask
+        run: pip install "flask>=3.0,<4"
+
       - name: unittest discover
         run: python -m unittest discover -v tests
